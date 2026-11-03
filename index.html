@@ -276,7 +276,24 @@ footer{padding-bottom:90px}
 <input type="file" id="filePick" accept="image/*" hidden>
 <input type="file" id="jsonPick" accept=".json,application/json" hidden>
  
-<script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+/* ================= إعدادات Firebase الخاصة بك ================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyBMlwpVzoFEjVzTHyQxRlqaZF6HURJ3HSk",
+  authDomain: "oceansidemenu.firebaseapp.com",
+  projectId: "oceansidemenu",
+  storageBucket: "oceansidemenu.firebasestorage.app",
+  messagingSenderId: "794457254523",
+  appId: "1:794457254523:web:f6362f1f9f3f455b4c90de",
+  measurementId: "G-72JX5B8X6T"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
 /* ================= إعدادات الأمان وحماية المدير المدمجة (مع تخزين كلمة المرور محلياً لتغييرها) ================= */
 const SECURE_CRED = {
   emHash: "b2NlYW5zaWRlLm5rQGdtYWlsLmNvbQ==", // Oceanside.nk@gmail.com (Base64)
@@ -292,17 +309,35 @@ const SECURE_CRED = {
   }
 };
 
-/* ================= التخزين ================= */
-const DBN='oceanside_v2', STORE='kv', LSK='oceanside_v2_ls';
-function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open(DBN,1);r.onupgradeneeded=()=>r.result.createObjectStore(STORE);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
-async function dbGet(){
-  try{const db=await idbOpen();return await new Promise((res,rej)=>{const q=db.transaction(STORE).objectStore(STORE).get('menu');q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})}
-  catch(e){try{return JSON.parse(localStorage.getItem(LSK))}catch(_){return null}}
+/* ================= التخزين السحابي الفوري عبر Firebase ================= */
+async function dbGet() {
+  return new Promise((resolve) => {
+    onSnapshot(doc(db, "menuDB", "currentMenu"), (docSnap) => {
+      if (docSnap.exists()) {
+        resolve(docSnap.data().data);
+      } else {
+        resolve(null);
+      }
+    }, (error) => {
+      console.error("خطأ في جلب البيانات من السحابة:", error);
+      resolve(null);
+    });
+  });
 }
-async function dbSet(d){
-  try{const db=await idbOpen();await new Promise((res,rej)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(d,'menu');tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}
-  catch(e){try{localStorage.setItem(LSK,JSON.stringify(d))}catch(_){toast('تعذر الحفظ: المساحة ممتلئة',true)}}
+
+async function dbSet(d) {
+  try {
+    await setDoc(doc(db, "menuDB", "currentMenu"), {
+      data: d,
+      updatedAt: new Date()
+    });
+    console.log("تم حفظ التعديلات في السحابة بنجاح!");
+  } catch (e) {
+    console.error("تعذر الحفظ في السحابة:", e);
+    toast('تعذر الحفظ في السحابة', true);
+  }
 }
+
 let st;function save(){clearTimeout(st);st=setTimeout(()=>dbSet(data),50)}
  
 /* ================= أدوات ================= */
@@ -620,7 +655,6 @@ function openLogin(){
           if(SECURE_CRED.verifyPw($('lPw').value)){
             pendingOtp = Math.floor(100000 + Math.random() * 900000).toString();
             
-            // فتح واتساب مباشرة لإرسال رمز التحقق الثنائي للمشرف
             const adminWa = normPhone(data.settings.whatsapp) || "966502174243";
             const otpMsg = `🔐 *رمز التحقق الثنائي (2FA)*\nرمز الدخول الخاص بك لمدير المنيو هو: *${pendingOtp}*`;
             const waUrl = `https://wa.me/${adminWa}?text=${encodeURIComponent(otpMsg)}`;
@@ -674,7 +708,6 @@ function settingsModal(){
     actions:[{label:'حفظ التعديلات',cls:'green',fn:()=>{
       const wa=normPhone($('sWa').value);if(!wa){alert('رقم واتساب غير صحيح');return false}
       
-      // معالجة تغيير كلمة المرور إذا تم إدخالها
       const oldPw = $('sOldPw').value;
       const newPw = $('sNewPw').value.trim();
       if(oldPw || newPw){
@@ -802,7 +835,7 @@ const SOC={
   facebook:{n:'فيسبوك',i:'📘',u:h=>'https://facebook.com/'+h},
   youtube:{n:'يوتيوب',i:'▶️',u:h=>'https://youtube.com/@'+h},
   telegram:{n:'تيليجرام',i:'✈️',u:h=>'https://t.me/'+h},
-  whatsapp:{n:'واتساب',i:'💬',u:h=>'https://wa.me/'+(normPhone(h)||h.replace(/\D/g,''))},
+  whatsapp:{n:'واتساب',i:'💬',u:h=>'https://wa.me/'+(normPhone(h)||h.replace(/\D/g, ''))},
   phone:{n:'اتصال',i:'📞',u:h=>'tel:'+h.replace(/[^\d+]/g,'')},
   map:{n:'الموقع على الخريطة',i:'📍',u:h=>h},
   website:{n:'الموقع الإلكتروني',i:'🌐',u:h=>h}
@@ -884,7 +917,7 @@ const EVENTS=[
   {k:'ram',n:'رمضان كريم',e:'🌙',c:['#0f2027','#2c5364'],t:'رمضان كريم',s:'أجواء رمضانية وعروض للإفطار والسحور',b:'رمضان',discount:''},
   {k:'eid',n:'عيد مبارك',e:'🕌',c:['#00695c','#00897b'],t:'عيد مبارك',s:'كل عام وأنتم بخير، عروض العيد وصلت',b:'عيد مبارك',discount:''},
   {k:'wk',n:'نهاية الأسبوع',e:'🏖️',c:['#0277bd','#00838f'],t:'عرض نهاية الأسبوع',s:'استمتع بعطلتك مع أطيب الأصناف',b:'الجمعة والسبت',discount:''},
-  {k:'fri',n:'الجمعة البيضاء',e:'🏷️',c:['#212121','#455a64'],t:'الجمعة البيضاء',s:'أقوى الخصومات على المنيو بالكامل',b:'خصم كبير',discount:''},
+  {k:'fri',n:'الجمعة البيضاء',e:'🏷️',c:['#212121','#455a64'],t:'عرض الجمعة البيضاء',s:'أقوى الخصومات على المنيو بالكامل',b:'خصم كبير',discount:''},
   {k:'bday',n:'عيد ميلاد المطعم',e:'🎂',c:['#ad1457','#7b1fa2'],t:'عيد ميلادنا',s:'نحتفل معكم بعروض وهدايا لعملائنا',b:'احتفال',discount:''}
 ];
 
@@ -964,7 +997,7 @@ function renderCmtTicker(){
   track.style.setProperty('--dur',((set*reps)/45)+'s');
 }
  
-/* ================= التشغيل ================= */
+/* ================= التشغيل الأولي ================= */
 (async()=>{
   const d=await dbGet();
   data=Object.assign(EMPTY(),d||{});
